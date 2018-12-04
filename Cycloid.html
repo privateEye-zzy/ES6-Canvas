@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>最速降线实验</title>
+		<style>
+			html,body,*{font-size:12px;margin:0;padding:0;font-weight:normal;font-family:"Microsoft YaHei";line-height:1;}
+			h1{font-size: 2.0rem;}
+			.content{background:#FCFCFC;height:100vh;display: flex;align-items:center;justify-content: center;flex-direction:column;}
+			#canvas{margin: 2rem 0;border:2px solid #424242;display:block;}
+			.ctrl{display: flex;align-items:center;justify-content: center;flex-direction:row}
+			.btn{transition: all .2s ease-in;filter: brightness(1);display: flex;margin-left: 1.2rem;margin-bottom: 0.8rem;border-radius: 4px;color: #fff;padding:0.8rem;font-size:1.3rem;cursor: pointer;}
+			.btn:hover{filter: brightness(0.9);}
+			.active{background: #007AFF;}
+			.forbid{background: #ccc;}
+		</style>
+	</head>
+	<body>
+		<div class='content'>
+			<h1>Canvas动画实战—最速降线</h1>
+			<canvas id='canvas' width="520" height="340"></canvas>
+			<dl class='ctrl'>
+				<dd id='animStart' class='btn active'>动画开始</dd>
+				<dd id='animPause' class='btn forbid'>动画暂停</dd>
+			</dl>
+		</div>
+	</body>
+	<script>
+		const angleToRad = angle => Math.PI / 180 * angle
+		const fx = angle => {
+			let r = angleToRad(angle)
+			let x = x0 + a * (r - Math.sin(r))
+			let y = y0 + a * (1 - Math.cos(r))
+			return {x, y}
+		}
+		const animStartBtn = document.querySelector('#animStart')
+		const animPauseBtn = document.querySelector('#animPause')
+		const planeSvg = new Image()
+		planeSvg.src = './svg/plane.svg'
+		const canvas = document.querySelector('#canvas')
+		const ctx = canvas.getContext('2d')
+		const a = 300 / 2, g = 9.8 * 100
+		const x0 = 20, y0 = 20  // 初始位置
+		const totalTime = Math.PI * Math.sqrt(a / g) // 运动总时间
+		let totalJourney = 0  // 总路程，通过微积分思想验证
+		let totalArea = 0  // 总面积，通过微积分思想验证
+		const n = ~~(totalTime * 1000 / 16.6667)  // 微积分划分的份数
+		let sportXs = [], sportYs = []
+		let btnFlag = false
+		let animHandler = null  // 动画句柄
+		let currFrame = 0  // 当前动画帧
+		// 最速降线的运动轨迹
+		function calcSportPath(){
+			let dr = 180 / n  
+			for (let i = 0; i <= n; i++){
+				let ds = 2 * a * Math.sin(angleToRad(dr * i) / 2) * angleToRad(dr)  // 弧长微分
+				let da = a**2 * (1 - Math.cos(angleToRad(dr * i)))**2 * angleToRad(dr)  // 面积微分
+				totalJourney += ds
+				totalArea += da
+				let {x, y} = fx(dr * i)
+				sportXs.push(x)
+				sportYs.push(y)
+			}
+		}
+		// 绘制曲线轨迹
+		function drawCurve(color='#ddd', len=sportXs.length){
+			ctx.save()
+			ctx.beginPath()
+			ctx.lineWidth = '3'
+			for (let i = 0; i <= len; i++){
+				ctx.lineTo(sportXs[i], sportYs[i])
+				ctx.strokeStyle = color
+				ctx.stroke()
+			}
+			ctx.restore()
+		}
+		// 绘制简单小球沿曲线轨迹运动
+		function drawBall(x, y){
+			ctx.save()
+			ctx.beginPath()
+			ctx.arc(x + 5, y - 8, 10, 0, Math.PI*2, false)
+			ctx.fillStyle = '#007AFF'
+			ctx.fill()
+			ctx.restore()
+		}
+		// 绘制曲线沿轨迹运动扫过的面积
+		function drawArea(){
+			ctx.save()
+			ctx.beginPath()
+			ctx.moveTo(sportXs[sportXs.length - 1], sportYs[0])
+			const grd = ctx.createLinearGradient(0, 0, sportXs[currFrame], sportYs[currFrame])
+			grd.addColorStop(0, 'rgba(255, 250, 205, 0.1)')
+			grd.addColorStop(1, 'rgba(255, 250, 205, 0.6)')
+			ctx.fillStyle = grd
+			for(let i = 0; i <= currFrame; i++){
+				ctx.lineTo(sportXs[i], sportYs[i] - 3)
+			}
+			ctx.fill()
+			ctx.restore()
+		}
+		// 绘制沿曲线轨迹运动中的物体
+		function drawPlane(x, y){
+			ctx.save()
+			ctx.beginPath()
+			ctx.translate(x, y)
+			const r = angleToRad(180 / n * currFrame) // 当前角度
+			const dr = Math.atan(Math.sin(r) / (1 - Math.cos(r)))  // 当前切线斜率
+			ctx.rotate(dr)
+			let scale = currFrame / n > 0.5 ? (1 - currFrame / n) : currFrame / n 
+			ctx.scale(0.8 + scale, 0.8 + scale)
+			ctx.translate(-x, -y)
+			ctx.drawImage(planeSvg, x - 15, y - 15, 30, 30)	
+			ctx.closePath()
+			ctx.restore()
+		}
+		function refresh(){
+			drawCurve()  // 绘制曲线轨迹
+			drawCurve('#ff5252', currFrame)  // 绘制物体沿曲线走过的痕迹
+			drawArea()  // 绘制曲线沿轨迹运动扫过的面积
+			// drawBall(sportXs[currFrame], sportYs[currFrame])
+			drawPlane(sportXs[currFrame], sportYs[currFrame])
+		}
+		function animate(){
+			if(currFrame > n) {
+				console.log(`实验结果:总时间为${totalTime.toFixed(2)}秒,总路程为:${totalJourney.toFixed(2)}米, 总面积为:${totalArea.toFixed(2)},理论路程为:${4 * a.toFixed(2)}米,理论面积为:${(1.5 * Math.PI * a**2).toFixed(2)}`)
+				btnFlag = false
+				currFrame = 0
+				btnStyleChange()
+				return window.cancelAnimationFrame(animHandler)
+			}
+			ctx.clearRect(0, 0, canvas.width, canvas.height)
+			refresh()
+			currFrame += 1  // 当前帧计数
+			animHandler = window.requestAnimationFrame(()=>{animate()})
+		}
+		function btnStyleChange(){
+			animStartBtn.classList.toggle('active')
+			animStartBtn.classList.toggle('forbid')
+			animPauseBtn.classList.toggle('active')
+			animPauseBtn.classList.toggle('forbid')
+		}
+		window.onload = () => {
+			calcSportPath()
+			animStartBtn.addEventListener('click', e => {
+				if(!btnFlag){
+					btnFlag = true
+					btnStyleChange()
+					animate()
+				}
+			})
+			animPauseBtn.addEventListener('click', e => {
+				if(btnFlag){
+					btnFlag = false
+					btnStyleChange()
+					window.cancelAnimationFrame(animHandler)
+				}
+			})
+			refresh()
+		}
+	</script>
+</html>
